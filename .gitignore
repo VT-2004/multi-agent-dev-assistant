@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Node
+node_modules/
+.next/
+out/
+
+# Data (keep folder structure, ignore contents)
+backend/data/chroma_db/*
+!backend/data/chroma_db/.gitkeep
+backend/data/repos/*
+!backend/data/repos/.gitkeep
+
+# Misc
+.DS_Store
+*.log

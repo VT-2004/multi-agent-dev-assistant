@@ -1,0 +1,25 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-dotenv==1.0.1
+pydantic==2.9.2
+
+# LangChain / LangGraph
+langchain==0.3.7
+langgraph==0.2.39
+langchain-groq==0.2.1
+langchain-community==0.3.5
+langchain-chroma==0.1.4
+
+# Vector store + embeddings
+chromadb==0.5.18
+sentence-transformers==3.2.1
+
+# GitHub integration
+PyGithub==2.4.0
+GitPython==3.1.43
+
+# Utilities
+requests==2.32.3
+tiktoken==0.8.0
+websockets==13.1
+langchain-huggingface==0.1.2
