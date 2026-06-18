@@ -1,11 +1,13 @@
 import hmac
 import hashlib
-
 from app.core.config import settings
 
 
 def verify_webhook_signature(payload_bytes: bytes, signature_header: str) -> bool:
-    """Verify that a webhook payload came from GitHub using the shared secret."""
+    """Verify GitHub webhook signature. If no secret configured, allow all."""
+    if not settings.GITHUB_WEBHOOK_SECRET:
+        return True  # no secret configured — allow everything
+
     if not signature_header or not signature_header.startswith("sha256="):
         return False
 
@@ -19,10 +21,6 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str) -> boo
 
 
 def parse_issue_event(payload: dict) -> dict | None:
-    """
-    Parse a GitHub issue webhook payload.
-    Returns a dict with issue details if this is a new/labeled issue, else None.
-    """
     action = payload.get("action")
     if action not in ("opened", "labeled"):
         return None
@@ -33,7 +31,7 @@ def parse_issue_event(payload: dict) -> dict | None:
     return {
         "issue_number": issue.get("number"),
         "issue_title": issue.get("title", ""),
-        "issue_body": issue.get("body", ""),
+        "issue_body": issue.get("body", "") or "",
         "repo_owner": repo.get("owner", {}).get("login", ""),
         "repo_name": repo.get("name", ""),
     }
