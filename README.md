@@ -1,93 +1,170 @@
-markdown# ⚡ Multi-Agent Dev Assistant
+# ⚡ Multi-Agent Dev Assistant
 
-An autonomous AI system that takes a GitHub issue → retrieves relevant codebase context → generates a code fix → reviews it → and opens a Pull Request automatically.
+> An autonomous AI system that reads a GitHub issue, retrieves relevant codebase context, generates a targeted code fix, reviews it, and opens a Pull Request — automatically.
 
-Built with LangGraph, LangChain, Groq (Llama 3.1), ChromaDB, FastAPI, and Next.js.
+Built with **LangGraph**, **LangChain**, **Groq (Llama 3.1)**, **ChromaDB**, **FastAPI**, and **Next.js**.
+
+---
 
 ## Demo
 
-> Issue opened: "Add Pinterest as a supported platform"
-> 
-> 34 seconds later: PR opened automatically with the correct code change.
+![Demo — GitHub issue → agents reasoning → PR opened](docs/images/demo.gif)
 
-**Live PRs opened by the agent:** [github.com/VT-2004/social-dash/pulls](https://github.com/VT-2004/social-dash/pulls)
+*GitHub issue created → agents reason in real time → PR opened automatically in ~34 seconds*
+
+---
+
+## Live Proof
+
+- **Tool repo:** [github.com/VT-2004/multi-agent-dev-assistant](https://github.com/VT-2004/multi-agent-dev-assistant)
+- **Auto-generated PRs:** [github.com/VT-2004/social-dash/pulls](https://github.com/VT-2004/social-dash/pulls) — real PRs opened by the agent on a live repo
+
+---
 
 ## Results
 
-- Agents resolved **6/8 in-scope issues (75%)** automatically
-- Average time-to-PR: **34 seconds**
-- Severity classifier correctly skipped **2/2 out-of-scope issues** in under 3 seconds
-- Zero crashes across 10-issue batch test
+| Metric | Value |
+|--------|-------|
+| Autonomous resolution rate | **75%** of in-scope issues |
+| Average time-to-PR | **34 seconds** |
+| Out-of-scope issues correctly skipped | **2/2** in under 3 seconds |
+| Crashes across 10-issue batch test | **0** |
 
-## Architecture
-GitHub Issue → Severity Classifier (attempt/skip?)
+---
 
-↓
+## Pipeline Outcomes
 
-Context Agent (RAG on codebase via ChromaDB)
+The system handles two outcomes automatically:
 
-↓
+### ✅ Success — PR Opened
 
-Code Agent (Groq Llama 3.1 — generates targeted edits)
+**1. GitHub Issue Created**
 
-↓
+![GitHub issue created](docs/images/screenshot-issue.png)
 
-Review Agent (checks for bugs/security issues)
+**2. Dashboard — Agents Running Live**
 
-↓ (retry loop if review fails, max 2 retries)
+![Dashboard running live](docs/images/screenshot-running.png)
 
-GitHub PR via REST API
+**3. Output — PR Opened Automatically**
 
-↓
+![PR opened output](docs/images/screenshot-output.png)
 
-Next.js Dashboard (live agent reasoning log via WebSocket)
+---
 
-## Tech Stack
+### 🔴 Escalation — Needs Human
 
-| Layer | Technology |
-|-------|-----------|
-| Agent orchestration | LangGraph (StateGraph with conditional edges) |
-| LLM | Groq — Llama 3.1 8B Instant |
-| RAG / Vector store | ChromaDB + sentence-transformers (all-MiniLM-L6-v2) |
-| Backend | FastAPI + async background tasks + WebSockets |
-| GitHub integration | PyGithub (PR creation, branch management) |
-| Frontend | Next.js 15 + TypeScript + Tailwind CSS |
+When the agent cannot confidently resolve an issue after retries, it correctly escalates rather than merging bad code.
+
+**4. Dashboard — Agents Running (complex issue)**
+
+![Dashboard needs human running](docs/images/screenshot-needs-human-running.png)
+
+**5. Output — Needs Human (with full retry log)**
+
+![Needs human output](docs/images/screenshot-needs-human-output.png)
+
+The full retry reasoning is visible in the log — every attempt, every failure reason, and the final escalation decision. A human can pick up exactly where the agent left off.
+
+---
 
 ## How It Works
+User opens GitHub issue
 
-1. **Severity Classifier** — reads the issue title/body and decides whether to attempt or skip (skips vague/large-scope issues immediately)
-2. **Context Agent** — uses RAG to retrieve the most relevant code chunks from the target repo
-3. **Code Agent** — sends the issue + retrieved context to Groq Llama 3.1, which generates a targeted JSON edit (search/replace format)
-4. **Review Agent** — reviews the diff for bugs, security issues, and whether it actually addresses the issue
-5. **Retry Loop** — if review fails, routes back to Code Agent with feedback (max 2 retries)
-6. **PR Creation** — creates a branch, commits the change, opens a PR with the full agent reasoning log
+↓
 
-## Project Structure
+GitHub webhook fires → FastAPI receives it instantly
+
+↓
+
+Severity Classifier → attempt or skip?
+
+↓ (attempt)
+
+Context Agent → RAG search over codebase (ChromaDB)
+
+↓
+
+Code Agent → Groq Llama 3.1 generates targeted JSON edit
+
+↓
+
+Review Agent → checks diff for bugs / security issues
+
+↓ (fail → retry with feedback, max 2 retries)
+
+↓ (pass)
+
+GitHub PR created automatically
+
+↓
+
+Next.js Dashboard → live agent reasoning log via WebSocket
+
+---
+
+## Architecture
 multi-agent-dev-assistant/
 
 ├── backend/
 
 │   ├── app/
 
-│   │   ├── agents/          # LangGraph nodes (severity, context, code, review)
+│   │   ├── agents/
 
-│   │   ├── core/            # Config, state schema, job store, pipeline runner
+│   │   │   ├── orchestrator.py        # LangGraph StateGraph — wires all agents
 
-│   │   ├── rag/             # Chunker, embeddings, ChromaDB vectorstore, retriever
+│   │   │   ├── severity_classifier.py # Groq LLM — attempt or skip?
 
-│   │   ├── github_integration/  # PR creation, webhook handler
+│   │   │   ├── code_agent.py          # Groq LLM — generates JSON search/replace edits
 
-│   │   ├── websocket/       # WebSocket connection manager
+│   │   │   ├── review_agent.py        # Groq LLM — reviews diff for bugs/security
 
-│   │   ├── api/             # FastAPI routes
+│   │   │   └── context_agent.py       # RAG retrieval node
 
-│   │   └── main.py          # FastAPI app entry point
+│   │   ├── core/
+
+│   │   │   ├── state.py               # LangGraph AgentState TypedDict
+
+│   │   │   ├── config.py              # .env loader
+
+│   │   │   ├── job_store.py           # In-memory job tracking
+
+│   │   │   └── pipeline_runner.py     # Async background task runner
+
+│   │   ├── rag/
+
+│   │   │   ├── ingest.py              # Clone target repo via GitPython
+
+│   │   │   ├── chunker.py             # Language-aware code chunking
+
+│   │   │   ├── vectorstore.py         # ChromaDB + sentence-transformers embeddings
+
+│   │   │   └── retriever.py           # Cosine similarity retrieval
+
+│   │   ├── github_integration/
+
+│   │   │   ├── client.py              # PyGithub wrapper
+
+│   │   │   ├── pr_manager.py          # Branch + commit + PR creation
+
+│   │   │   └── webhook.py             # GitHub webhook signature verification
+
+│   │   ├── websocket/
+
+│   │   │   └── manager.py             # WebSocket connection manager
+
+│   │   ├── api/
+
+│   │   │   └── routes.py              # FastAPI routes + webhook endpoint
+
+│   │   └── main.py                    # FastAPI app entry point
 
 │   ├── data/
 
-│   │   ├── chroma_db/       # Vector store (gitignored)
+│   │   ├── chroma_db/                 # Vector store (gitignored)
 
-│   │   └── repos/           # Cloned target repos (gitignored)
+│   │   └── repos/                     # Cloned target repos (gitignored)
 
 │   ├── requirements.txt
 
@@ -95,23 +172,52 @@ multi-agent-dev-assistant/
 
 ├── frontend/
 
-│   ├── app/                 # Next.js App Router
+│   ├── app/
 
-│   ├── lib/                 # API client + types
+│   │   ├── page.tsx                   # Dashboard UI
+
+│   │   ├── layout.tsx
+
+│   │   └── globals.css
+
+│   ├── lib/
+
+│   │   └── api.ts                     # API client + WebSocket
 
 │   └── package.json
+
+├── docs/
+
+│   └── images/                        # Screenshots and demo GIF
 
 ├── docker-compose.yml
 
 └── README.md
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Agent orchestration | LangGraph — StateGraph with conditional edges + retry loops |
+| LLM | Groq — Llama 3.1 8B Instant (128K context, free tier) |
+| RAG / Vector store | ChromaDB + sentence-transformers (all-MiniLM-L6-v2) |
+| Code chunking | LangChain RecursiveCharacterTextSplitter (language-aware) |
+| Backend | FastAPI + async background tasks + WebSockets |
+| GitHub integration | PyGithub (branch, commit, PR) + webhook verification |
+| Frontend | Next.js 15 + TypeScript + Tailwind CSS |
+| Tunneling (dev) | Cloudflare Tunnel (exposes local server for webhook) |
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- Groq API key (free at [console.groq.com](https://console.groq.com))
-- GitHub Personal Access Token (repo scope)
+- Groq API key — free at [console.groq.com](https://console.groq.com)
+- GitHub Personal Access Token — Settings → Developer settings → Tokens → `repo` scope
 
 ### 1. Clone the repo
 
@@ -125,10 +231,16 @@ cd multi-agent-dev-assistant
 ```bash
 cd backend
 python -m venv venv
-source venv/Scripts/activate  # Windows: .\venv\Scripts\Activate.ps1
+
+# Windows
+.\venv\Scripts\Activate.ps1
+
+# Mac/Linux
+source venv/bin/activate
+
 pip install -r requirements.txt
 cp .env.example .env
-# Fill in your GROQ_API_KEY and GITHUB_TOKEN in .env
+# Fill in GROQ_API_KEY and GITHUB_TOKEN in .env
 ```
 
 ### 3. Index your target repo
@@ -154,7 +266,28 @@ npm run dev
 
 ### 6. Open the dashboard
 
-Visit `http://localhost:3000` — fill in the trigger form with an issue from your target repo and click **▶ Run Pipeline**.
+Visit `http://localhost:3000` — fill in the trigger form or set up the webhook for automatic triggering.
+
+---
+
+## Webhook Setup (Automatic Triggering)
+
+To trigger pipelines automatically when GitHub issues are created:
+
+1. Expose your local server with Cloudflare Tunnel:
+```bash
+./cloudflared.exe tunnel --url http://localhost:8000
+```
+
+2. Go to `https://github.com/<owner>/<repo>/settings/hooks`
+3. Add webhook:
+   - **Payload URL:** `https://your-tunnel-url.trycloudflare.com/api/webhook/github`
+   - **Content type:** `application/json`
+   - **Events:** Issues only
+
+Now any new issue on the repo triggers the pipeline automatically — no manual input needed.
+
+---
 
 ## Docker (Self-Hosted)
 
@@ -167,17 +300,21 @@ docker-compose up --build
 - Backend: `http://localhost:8000`
 - Frontend: `http://localhost:3000`
 
+---
+
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `GROQ_API_KEY` | Groq API key for Llama 3.1 |
-| `GITHUB_TOKEN` | GitHub PAT with repo scope |
-| `GITHUB_WEBHOOK_SECRET` | Secret for webhook verification |
+| `GITHUB_TOKEN` | GitHub PAT with `repo` scope |
+| `GITHUB_WEBHOOK_SECRET` | Secret for webhook signature verification (optional) |
 | `TARGET_REPO_OWNER` | Default repo owner |
 | `TARGET_REPO_NAME` | Default repo name |
-| `CHROMA_DB_PATH` | Path for ChromaDB persistence |
-| `REPO_CLONE_PATH` | Path for cloned repos |
+| `CHROMA_DB_PATH` | Path for ChromaDB persistence (default: `./data/chroma_db`) |
+| `REPO_CLONE_PATH` | Path for cloned repos (default: `./data/repos`) |
+
+---
 
 ## Extending to Other Repos
 
@@ -188,14 +325,26 @@ python -m app.rag.ingest https://github.com/<owner>/<repo>.git <repo-name>
 python -m app.rag.vectorstore ./data/repos/<repo-name> <repo-name>
 ```
 
-Then use `<repo-name>` as the repo name in the dashboard trigger form.
+Then use `<repo-name>` in the dashboard trigger form or point your webhook at the new repo.
+
+---
 
 ## Resume Metrics
+✅ Agents autonomously resolved 75% of in-scope issues with PRs in under 35 seconds average
 
-- **75% autonomous resolution rate** on well-scoped issues
-- **34 second average time-to-PR** on resolved issues  
-- **RAG retrieval** over 500+ code chunks with sub-2s latency
-- **Multi-agent coordination** using LangGraph StateGraph with conditional edges and retry loops
+✅ Severity classifier correctly skipped 2/2 out-of-scope issues in under 3 seconds
+
+✅ RAG retrieval over 500+ code chunks with sub-2s latency
+
+✅ Multi-agent coordination using LangGraph StateGraph with conditional edges and retry loops
+
+✅ Real-time agent reasoning streamed to Next.js dashboard via WebSockets
+
+✅ Zero crashes across 10-issue batch test run
+
+✅ Smart escalation — correctly routes ambiguous issues to human review
+
+---
 
 ## License
 
